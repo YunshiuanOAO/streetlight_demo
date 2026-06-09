@@ -1,0 +1,14 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: streetlight-mosquitto
+    restart: unless-stopped
+    ports:
+      # bind 到 0.0.0.0 讓同 VPC 的 subscriber EC2 可以直連
+      # ⚠️ 必須由 AWS Security Group 限制 ${BACKEND_PORT} 只接受內網來源
+      # (例如 subscriber EC2 的 SG 或 VPC CIDR)，不要對公網開放
+      - "${BACKEND_PORT:-11883}:1883"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ${HONEYPOT_LOGS_DIR}:/mosquitto/log
+      - ${HONEYPOT_DATA_DIR}:/mosquitto/data

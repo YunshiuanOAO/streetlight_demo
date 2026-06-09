@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>路燈系統控制面板</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.4/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft JhengHei', 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #16213e, #0f3460);
+            padding: 20px 30px;
+            text-align: center;
+            border-bottom: 3px solid #e94560;
+        }
+        .header h1 { font-size: 24px; color: #fff; }
+        .header p { color: #aaa; margin-top: 5px; font-size: 14px; }
+        .user-bar {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 13px;
+            color: #aaa;
+        }
+        .user-bar a {
+            color: #53d8fb;
+            text-decoration: none;
+            margin-left: 12px;
+        }
+        .user-bar a:hover { color: #e94560; }
+        .header { position: relative; }
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            border: 1px solid #0f3460;
+        }
+        .panel h2 {
+            color: #e94560;
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f3460;
+        }
+        .lamp-card {
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 12px;
+        }
+        .lamp-card h3 {
+            color: #53d8fb;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .lamp-info { color: #aaa; font-size: 12px; margin-bottom: 10px; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .btn:hover { transform: translateY(-1px); opacity: 0.9; }
+        .btn-spw { background: #e94560; color: #fff; }
+        .btn-sgw { background: #0f3460; color: #53d8fb; border: 1px solid #53d8fb; }
+        .btn-sra { background: #533483; color: #fff; }
+        .custom-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #0f3460;
+        }
+        .custom-section label { font-size: 13px; color: #aaa; }
+        .custom-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 5px;
+        }
+        .custom-input input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #0f3460;
+            border: 1px solid #533483;
+            border-radius: 5px;
+            color: #fff;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .custom-input input:focus { outline: none; border-color: #e94560; }
+        .btn-send { background: #e94560; color: #fff; }
+        .log-area {
+            height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+        .log-entry {
+            padding: 8px 12px;
+            border-radius: 5px;
+            margin-bottom: 6px;
+            word-break: break-all;
+        }
+        .log-cmd {
+            background: rgba(83, 216, 251, 0.1);
+            border-left: 3px solid #53d8fb;
+        }
+        .log-resp {
+            background: rgba(233, 69, 96, 0.1);
+            border-left: 3px solid #e94560;
+        }
+        .log-report {
+            background: rgba(27, 107, 58, 0.1);
+            border-left: 3px solid #1b6b3a;
+        }
+        .log-time { color: #666; }
+        .log-topic { color: #53d8fb; }
+        .log-data { color: #f0c040; word-break: break-all; }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #e94560;
+        }
+        .status-dot.connected { background: #4caf50; }
+        .clear-btn {
+            margin-left: auto;
+            padding: 4px 12px;
+            background: #333;
+            color: #aaa;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        /* MongoDB 區塊（runtime / command_logs） */
+        .db-container {
+            max-width: 1200px;
+            margin: 0 auto 30px;
+            padding: 0 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .db-meta {
+            font-size: 12px;
+            color: #888;
+            margin-left: auto;
+        }
+        .db-meta.err { color: #e94560; }
+        .db-table-wrap {
+            max-height: 360px;
+            overflow-y: auto;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+        }
+        table.db-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        table.db-table th, table.db-table td {
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid #0f3460;
+            white-space: nowrap;
+        }
+        table.db-table th {
+            background: #0f3460;
+            color: #53d8fb;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        table.db-table td.hex { color: #f0c040; word-break: break-all; white-space: normal; }
+        table.db-table td.dest-server  { color: #4caf50; }   /* 上行：去 server */
+        table.db-table td.dest-gateway { color: #53d8fb; }   /* 下行：去 gateway */
+        table.db-table tr:hover { background: rgba(83, 216, 251, 0.05); }
+        .db-empty { padding: 16px; text-align: center; color: #666; font-size: 12px; }
+        @media (max-width: 768px) {
+            .container, .db-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>路燈系統控制面板 - Web 訂閱者</h1>
+        <p>{{ comm_mode|upper }} 即時監控與控制介面</p>
+        <div class="user-bar">
+            使用者: <strong>{{ username }}</strong>
+            <a href="/logout">登出</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>指令控制</h2>
+
+            <div class="lamp-card">
+                <h3>路燈 1</h3>
+                <div class="lamp-info">MAC: 123456789A | 群組: 2</div>
+                <div class="btn-group">
+                    <button class="btn btn-spw" onclick="sendCmd('123456789A', 'SPW')">SPW 單盞控</button>
+                    <button class="btn btn-sgw" onclick="sendCmd('123456789A', 'SGW')">SGW 群控</button>
+                    <button class="btn btn-sra" onclick="sendCmd('123456789A', 'SRA')">SRA 立即回報</button>
+                </div>
+            </div>
+
+            <div class="lamp-card">
+                <h3>路燈 2</h3>
+                <div class="lamp-info">MAC: 2E4457B1CA | 群組: 50</div>
+                <div class="btn-group">
+                    <button class="btn btn-spw" onclick="sendCmd('2E4457B1CA', 'SPW')">SPW 單盞控</button>
+                    <button class="btn btn-sgw" onclick="sendCmd('2E4457B1CA', 'SGW')">SGW 群控</button>
+                    <button class="btn btn-sra" onclick="sendCmd('2E4457B1CA', 'SRA')">SRA 立即回報</button>
+                </div>
+            </div>
+
+            <div class="lamp-card">
+                <h3>路燈 3</h3>
+                <div class="lamp-info">MAC: 334422ABCC | 群組: 17</div>
+                <div class="btn-group">
+                    <button class="btn btn-spw" onclick="sendCmd('334422ABCC', 'SPW')">SPW 單盞控</button>
+                    <button class="btn btn-sgw" onclick="sendCmd('334422ABCC', 'SGW')">SGW 群控</button>
+                    <button class="btn btn-sra" onclick="sendCmd('334422ABCC', 'SRA')">SRA 立即回報</button>
+                </div>
+            </div>
+
+            <div class="custom-section">
+                <label>自訂 Hex 指令</label>
+                <div class="custom-input">
+                    <input type="text" id="customHex" placeholder="輸入 hex 資料，例如: 020B52123456789A013240">
+                    <button class="btn btn-send" onclick="sendCustom()">發送</button>
+                </div>
+                <div id="customHint" style="font-size:12px; margin-top:6px; min-height:1.2em;"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Socket / MQTT 訊息傳輸紀錄</h2>
+            <div class="status-bar">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText" style="font-size:13px; color:#aaa;">連線中...</span>
+                <button class="clear-btn" onclick="clearLog()">清除記錄</button>
+            </div>
+            <div class="log-area" id="logArea"></div>
+        </div>
+    </div>
+
+    <div class="db-container">
+        <div class="panel">
+            <h2 style="display:flex; align-items:center;">
+                路燈即時狀態 (MongoDB runtime)
+                <span class="db-meta" id="runtimeMeta">載入中...</span>
+            </h2>
+            <div class="db-table-wrap">
+                <table class="db-table">
+                    <thead>
+                        <tr>
+                            <th>MAC</th>
+                            <th>最後指令</th>
+                            <th>更新時間</th>
+                            <th>最後 Hex</th>
+                        </tr>
+                    </thead>
+                    <tbody id="runtimeBody"></tbody>
+                </table>
+                <div class="db-empty" id="runtimeEmpty" style="display:none;">尚無資料</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 style="display:flex; align-items:center;">
+                歷史指令紀錄 (MongoDB command_logs)
+                <span class="db-meta" id="logsMeta">載入中...</span>
+            </h2>
+            <div class="db-table-wrap">
+                <table class="db-table">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>目的地</th>
+                            <th>來源</th>
+                            <th>MAC</th>
+                            <th>Hex</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsBody"></tbody>
+                </table>
+                <div class="db-empty" id="logsEmpty" style="display:none;">尚無資料</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 經 HTTP 反向代理（如蜜罐 :80→:8080）時，WebSocket 升級常失敗並觸發 connect_error。
+        // 只用 long-polling + 禁止 upgrade，可避免握手後立刻斷線。
+        let _connectFailCount = 0;
+        const socket = io({
+            path: '/socket.io',
+            transports: ['polling'],
+            upgrade: false,
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1500,
+            timeout: 20000,
+        });
+        const logArea = document.getElementById('logArea');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+
+        function setStatusConnected(label) {
+            statusDot.classList.add('connected');
+            statusText.textContent = label || '已連線';
+            statusText.style.color = '#4caf50';
+        }
+
+        socket.on('connect', () => {
+            _connectFailCount = 0;
+            setStatusConnected('已連線');
+        });
+
+        socket.on('connect_error', (err) => {
+            _connectFailCount += 1;
+            statusDot.classList.remove('connected');
+            if (_connectFailCount >= 8) {
+                statusText.textContent = '長時間無法連線 Socket.IO（請檢查代理是否擋 /socket.io）';
+                statusText.style.color = '#e94560';
+            } else {
+                statusText.textContent = '即時通道重試中… (' + _connectFailCount + ')';
+                statusText.style.color = '#ffc107';
+            }
+            console.warn('[Socket.IO] connect_error', err);
+        });
+
+        socket.on('disconnect', () => {
+            statusDot.classList.remove('connected');
+            statusText.textContent = '已斷線';
+            statusText.style.color = '#e94560';
+        });
+
+        socket.on('mqtt_message', (data) => {
+            // 若 connect 事件因代理／session 時序沒觸發，至少收到 MQTT 時把狀態列拉回正常
+            if (!statusDot.classList.contains('connected')) {
+                setStatusConnected('已連線');
+            }
+            addLog(data);
+        });
+
+        function addLog(data) {
+            const entry = document.createElement('div');
+            let cssClass = 'log-cmd';
+            let direction = '>> 發送指令';
+
+            if (data.topic === 'streetlight/gateway_to_server') {
+                if (data.type === 'periodic_report') {
+                    cssClass = 'log-report';
+                    direction = '<< 定時回報';
+                } else {
+                    cssClass = 'log-resp';
+                    direction = '<< Gateway 回應';
+                }
+            }
+
+            entry.className = `log-entry ${cssClass}`;
+            entry.innerHTML = `
+                <div><span class="log-time">[${data.timestamp || new Date().toLocaleTimeString()}]</span>
+                <span class="log-topic">${direction}</span>
+                <strong>${data.command || ''}</strong></div>
+                ${data.mac ? `<div>MAC: ${data.mac}</div>` : ''}
+                <div class="log-data">Hex: ${data.data || ''}</div>
+            `;
+            logArea.prepend(entry);
+        }
+
+        function sendCmd(mac, cmdType) {
+            socket.emit('send_command', { mac: mac, cmd_type: cmdType });
+        }
+
+        function setHint(msg, color) {
+            const hint = document.getElementById('customHint');
+            hint.textContent = msg;
+            hint.style.color = color || '#aaa';
+        }
+
+        function sendCustom() {
+            const input = document.getElementById('customHex');
+            const hex = input.value.trim();
+            if (!hex) {
+                setHint('請輸入 hex（範例 020B52123456789A013240）', '#e94560');
+                return;
+            }
+            // 必須只含 0–9 / a–f / A–F；不接受空白、中文、其他符號
+            if (!/^[0-9a-fA-F]+$/.test(hex)) {
+                setHint('格式錯誤：只能包含 0-9 與 a-f', '#e94560');
+                return;
+            }
+            // 偶數位：每 2 字元才是一個 byte
+            if (hex.length % 2 !== 0) {
+                setHint('格式錯誤：hex 字元數必須為偶數（每 2 個 = 1 byte）', '#e94560');
+                return;
+            }
+            if (!socket.connected) {
+                setHint('Socket.IO 尚未連線，請稍候或重新整理頁面', '#e94560');
+                return;
+            }
+            socket.emit('send_command', { mac: 'custom', cmd_type: 'CUSTOM', hex_data: hex });
+            setHint(`已送出 ${hex.toUpperCase()}（等待 gateway 回包；若 hex 不在 gateway 的 mapping，將不會有 DPW 回應）`, '#4caf50');
+            input.value = '';
+        }
+
+        function clearLog() {
+            logArea.innerHTML = '';
+        }
+
+        document.getElementById('customHex').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendCustom();
+        });
+
+        // ---------- MongoDB polling (runtime + command_logs) ----------
+        // 由 VM-B TCP Management 寫入；本頁透過 /api/runtime 與 /api/command_logs 讀。
+        // 失敗（503 = mongo 未連線）會顯示提示，不影響上方即時 Socket.IO 推送。
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        async function refreshRuntime() {
+            const meta = document.getElementById('runtimeMeta');
+            const body = document.getElementById('runtimeBody');
+            const empty = document.getElementById('runtimeEmpty');
+            try {
+                const r = await fetch('/api/runtime');
+                if (!r.ok) {
+                    meta.textContent = `MongoDB 未連線 (${r.status})`;
+                    meta.classList.add('err');
+                    return;
+                }
+                const j = await r.json();
+                meta.textContent = `${j.count} 筆 · 更新於 ${new Date().toLocaleTimeString()}`;
+                meta.classList.remove('err');
+                body.innerHTML = '';
+                empty.style.display = (j.items && j.items.length) ? 'none' : 'block';
+                for (const it of (j.items || [])) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${escapeHtml(it.mac)}</td>
+                        <td>${escapeHtml(it.last_command)}</td>
+                        <td>${escapeHtml(it.updated_at)}</td>
+                        <td class="hex">${escapeHtml(it.last_hex)}</td>`;
+                    body.appendChild(tr);
+                }
+            } catch (e) {
+                meta.textContent = `讀取失敗: ${e}`;
+                meta.classList.add('err');
+            }
+        }
+
+        async function refreshLogs() {
+            const meta = document.getElementById('logsMeta');
+            const body = document.getElementById('logsBody');
+            const empty = document.getElementById('logsEmpty');
+            try {
+                const r = await fetch('/api/command_logs?limit=50');
+                if (!r.ok) {
+                    meta.textContent = `MongoDB 未連線 (${r.status})`;
+                    meta.classList.add('err');
+                    return;
+                }
+                const j = await r.json();
+                meta.textContent = `${j.count} 筆 · 更新於 ${new Date().toLocaleTimeString()}`;
+                meta.classList.remove('err');
+                body.innerHTML = '';
+                empty.style.display = (j.items && j.items.length) ? 'none' : 'block';
+                for (const it of (j.items || [])) {
+                    const dest = it.destination || (it.direction === 'up' ? 'server' : 'gateway');  // 兼容舊資料
+                    const destCls = dest === 'server' ? 'dest-server' : 'dest-gateway';
+                    const destLabel = dest === 'server' ? '↑ server' : '↓ gateway';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${escapeHtml(it.ts)}</td>
+                        <td class="${destCls}">${destLabel}</td>
+                        <td>${escapeHtml(it.source)}</td>
+                        <td>${escapeHtml(it.mac)}</td>
+                        <td class="hex">${escapeHtml(it.hex_data)}</td>`;
+                    body.appendChild(tr);
+                }
+            } catch (e) {
+                meta.textContent = `讀取失敗: ${e}`;
+                meta.classList.add('err');
+            }
+        }
+
+        refreshRuntime();
+        refreshLogs();
+        setInterval(refreshRuntime, 5000);
+        setInterval(refreshLogs, 5000);
+    </script>
+</body>
+</html>
